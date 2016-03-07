@@ -1,11 +1,11 @@
 # Weight Lifting Activity Quality Prediction Model
 
-This is a course assignment for Practical Machine Learning, Data Science Specialization by Johns Hopkins University via Coursera
-
 **Author: S. Wu**
 
+This is a course assignment for Practical Machine Learning, Data Science Specialization by Johns Hopkins University via Coursera
+
 Project Goal
-Use the ìWeight Lifting Exercises Datasetî to investigate and predict the outcome variable ìclasseî - ìhow (well)î an activity was performed by the participants.
+Use the ‚ÄúWeight Lifting Exercises Dataset‚Äù to investigate and predict the outcome variable ‚Äúclasse‚Äù - ‚Äúhow (well)‚Äù an activity was performed by the participants.
 
 Original Data Source
 The data for this project come from Groupware@LES HAR Project. The paper Qualitative Activity Recognition of Weight Lifting Exercises provides insight of the project and data features.
