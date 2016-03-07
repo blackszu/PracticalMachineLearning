@@ -1,0 +1,215 @@
+**Coursera Practical Machine Learning Assignment**
+
+## Weight Lifting Activity Quality Prediction Model
+
+**Author: S. Wu**
+
+
+### Project Goal 
+
+Use the "Weight Lifting Exercises Dataset" to investigate and predict the outcome variable "classe" - "how (well)" an activity was performed by the participants. 
+
+
+### Data Source
+
+**Assignment Datasets**
+
+The datasets can be obtained from the course web site, including [training data][1] for writeup, and [test data][2] for submission. They come in the form of comma-separated-value files.
+
+file name: "pml-training.csv", "pml-testing.csv"
+
+
+**Original Data Source**
+
+The data for this project come from [Groupware@LES HAR Project][3]. The paper [Qualitative Activity Recognition of Weight Lifting Exercises][4] provides insight of the project and data features.
+
+[1]: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+[2]: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+[3]: http://groupware.les.inf.puc-rio.br/har
+[4]: http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf
+
+\
+```{r packages, warning=FALSE, message=FALSE}
+# Check and load required R packages
+pkg<-c("knitr", "caret", "randomForest", "ggplot2", "gridExtra") 
+pkgCheck<-pkg %in% rownames(installed.packages())
+for(i in 1:length(pkg)) {
+    if(pkgCheck[i]==FALSE) {
+        install.packages(pkg[i])
+    } 
+    library(pkg[i],character.only = TRUE)
+}
+```
+
+```{r setoptions, echo=FALSE, warning=FALSE, include=FALSE}
+opts_chunk$set(fig.width=10,warning=FALSE, message=FALSE)
+```
+
+### 1. Data Loading and Cleaning
+
+**1.1 Load Data**
+
+```{r loadData, cache=TRUE}
+if (file.exists("pml-train.csv")==FALSE) {
+  url<- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+  download.file(url, "pml-train.csv")
+  }
+rawTrain<- read.csv("pml-train.csv", na.strings=c("NA", "", "#DIV/0!"))
+```
+
+```{r rmVar, echo=FALSE}
+rm(i,pkg,pkgCheck,url)
+```
+
+```{r setCounter}
+#set table and figure counter
+tnum<- 0L
+fnum<- 0L
+```
+
+**1.2 Check Data Quality and Features**
+
+```{r var, results='hide', cache=TRUE}
+str(rawTrain)
+#Results are hidden due to long length
+```
+
+The dataset contains `r ncol(rawTrain)` variables(columns). It is observed that:
+
+1. first two columns are row index and participants id, should be excluded.
+
+2. many variables contain mostly NA values, and should be excluded.
+
+3. columns 3~7 are time/window related, while the rest are sensor measurement related.
+
+```{r timeVar, echo=FALSE, fig.width=10}
+fnum=fnum+1
+g1<- qplot(classe, raw_timestamp_part_1, data=rawTrain)
+g2<- qplot(classe, raw_timestamp_part_2, data=rawTrain)
+g3<- qplot(classe, cvtd_timestamp, data=rawTrain)
+g4<- qplot(classe , data=rawTrain, fill=new_window, position=position_dodge())
+g5<- qplot(classe, num_window , data=rawTrain, geom="boxplot")
+grid.arrange(g1, g2, g3, g4, g5, ncol=3, nrow=2)
+```
+
+
+\ **Figure `r fnum`** Outcome "classe" by Time Related Variables 
+
+\
+
+Figure `r fnum` suggests that time variables and the binary "new_window" may not be useful predictors for outcome "classe". 
+
+```{r varRemove, cache=TRUE}
+# remove variables and produce dataset "dat" for prediction model fitting
+NAs<- which(colSums(is.na(rawTrain)) > 0)
+dat<- rawTrain[, -c(1:6, NAs)]
+```
+
+A clean dataset "dat" is produced with `r ncol(dat)` potential predictors.
+
+### 2. Data Partition
+
+Split the cleaned training data(dataset "dat") into 70% "train set" and 30% "test set".
+
+Note: The assignment comes with "training data"(pml-train.csv) for writeup and "test data"(pml-test.csv) for submission. The "training data" is cleaned and then split internally into a train set for model fitting and a test set for validation.
+
+To avoid confusion, in this report, "train set" and "test set" refer to the internal datasets split from the training data for machine learning, while "submission test cases" refers to the 20 test cases from pml-test.csv for the submission assignment.
+
+
+```{r split, cache=TRUE}
+set.seed(12345)
+inTrain<- createDataPartition(y=dat$classe, p=0.7, list=FALSE)
+trainSet<- dat[inTrain,]
+testSet<- dat[-inTrain,]
+rbind(trainSet=dim(trainSet), testSet=dim(testSet))
+```
+
+The train set has `r dim(trainSet)[1]` samples, whereas the test set has `r dim(testSet)[1]` samples.
+
+### 3. Building Prediction Model
+
+Try random forest and decision tree methods to predict the categorical outcome "classe".
+
+**3.1 Random Forest**
+```{r rf, cache=TRUE}
+set.seed(12345)
+# cross validation with out-of-bag (oob)
+fitRF<- randomForest(classe ~. , data=trainSet, importance=TRUE)
+fitRF
+```
+
+
+**3.2 Classification and Regression Trees - rpart**
+```{r rpart, cache=TRUE}
+set.seed(12345)
+# set cross validation = 10-folds cross validation
+trCtrl<- trainControl(method = "cv", number=10)
+fitRpart<- train(classe ~., data=trainSet, method="rpart", trControl=trCtrl)
+fitRpart
+```
+
+**3.3 Classification and Regression Trees - ctree**
+```{r ctree, cache=TRUE}
+set.seed(12345)
+# set cross validation = 10-folds cross validation
+trCtrl<- trainControl(method = "cv", number=10)
+fitCtree<- train(classe ~., data=trainSet, method="ctree", trControl=trCtrl)
+fitCtree
+```
+
+**3.4 Model Selection**
+```{r accuracy}
+tnum=tnum+1
+accuracy<- c(1-0.0032, max(fitRpart$results$Accuracy), max(fitCtree$results$Accuracy))
+ise<- 1-accuracy
+kable(data.frame(Model=c("random forest","rpart","ctree"), 
+                         accuracy=paste0(format(accuracy*100, digit=4),"%"),
+                         ise=paste0(format(ise*100, digit=4),"%")),
+                         col.names=c("Model","Accuracy", "In Sample Error"), row.names=F)
+```
+
+**Table `r tnum`.** Prediction Model Accuracy
+
+\
+
+The ***random forest*** algorithm, with out-of-bag (oob) cross-validation, produces the highest accuracy, thus is chosen as the final prediction model. 
+
+```{r plot, echo=FALSE, fig.width=10}
+fnum=fnum+1
+plot(fitRF, main="Random Forest Prediction Model")
+```
+
+
+\ **Figure `r fnum`** Random Forest Prediction Model
+
+\
+
+```{r varImpPlot, echo=FALSE, fig.width=10}
+fnum=fnum+1
+varImpPlot(fitRF, n.var=20, main="Top 20 Random Forest Variable Importance")
+```
+
+
+\ **Figure `r fnum`** Random Forest Prediction Model Top 20 Variable Importance
+
+\
+
+
+### 4. Test Set Prediction and Expected Out of Sample Error
+```{r testSet}
+val<- confusionMatrix(testSet$classe, predict(fitRF, newdata=testSet))
+val
+```
+
+Predicted with the **random forest** model with out-of-bag cross-validation,  the **estimated out of sample error is `r paste0(format((1-val$overall[1])*100, digit=2), "%")`** (= 1 - Accuracy `r paste0(format(val$overall[1]*100, digit=4), "%")` ).
+
+### 5. Submission Test Cases Prediction
+```{r testCases, cache=TRUE}
+if (file.exists("pml-test.csv")==FALSE) {
+  url<- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+  download.file(url, "pml-test.csv")
+  }
+testCases<- read.csv("pml-test.csv", na.strings=c("NA", "", "#DIV/0!"))
+submissionPred<- predict(fitRF, newdata=testCases)
+submissionPred
+```
